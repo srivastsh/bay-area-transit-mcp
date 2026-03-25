@@ -1,0 +1,39 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.srivastsh/bart-mcp",
+  "title": "BART Real-Time Transit",
+  "description": "Real-time BART departures, trip planning, fares, stations, and advisories.",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "url": "https://bart-mcp.srivastsh.workers.dev/mcp",
+      "type": "streamable-http"
+    }
+  ],
+  "repository": {
+    "url": "https://github.com/srivastsh/bay-area-transit-mcp",
+    "source": "github"
+  },
+  "tools": [
+    {
+      "name": "bart_stations",
+      "description": "List all BART stations with codes, addresses, and cities"
+    },
+    {
+      "name": "bart_departures",
+      "description": "Real-time departures from any BART station"
+    },
+    {
+      "name": "bart_trip",
+      "description": "Plan a trip between two BART stations"
+    },
+    {
+      "name": "bart_fare",
+      "description": "Get fare between two BART stations"
+    },
+    {
+      "name": "bart_advisories",
+      "description": "Current BART service advisories and delays"
+    }
+  ]
+}
