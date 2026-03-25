@@ -2,10 +2,14 @@
 
 Two Cloudflare Workers providing MCP (Model Context Protocol) access to BART and SF Muni real-time transit data. Works with Claude, ChatGPT, Poke, Cursor, and any MCP-compatible client.
 
+**You don't need to deploy anything.** Just point your MCP client at the hosted endpoints below.
+
 ## Live Endpoints
 
-- **BART**: `https://bart-mcp.srivastsh.workers.dev/mcp` (no auth required)
-- **Muni**: `https://muni-mcp.srivastsh.workers.dev/mcp` (BYOK — bring your own 511.org key)
+- **BART**: `https://bart-mcp.srivastsh.workers.dev/mcp` — no auth, just connect
+- **Muni**: `https://muni-mcp.srivastsh.workers.dev/mcp` — pass your free 511.org API key via `x-api-key-511` header
+
+These run on Cloudflare Workers' free tier (100k requests/day). Since the Muni server uses BYOK auth, each user's 511 rate limit is isolated to their own key.
 
 ## Quick Start
 
@@ -96,10 +100,11 @@ Use `mcp-remote` as a bridge:
 | `muni_vehicles` | Real-time vehicle GPS positions |
 | `muni_schedule` | Timetable for a line |
 
-
 ---
 
 ## Deploy Your Own
+
+Most users don't need to deploy — just use the hosted endpoints above. But if you want your own instance:
 
 ### Prerequisites
 
