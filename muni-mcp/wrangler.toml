@@ -1,0 +1,6 @@
+name = "muni-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# API_511_KEY must be set via: wrangler secret put API_511_KEY

@@ -1,0 +1,7 @@
+name = "bart-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+BART_API_KEY = "MW9S-E7SL-26DU-VV8V"
