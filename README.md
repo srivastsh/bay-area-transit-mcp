@@ -46,7 +46,9 @@ Just add the URL to your MCP client. No API key needed.
 
 ### Poke
 
-Add as a remote MCP server:
+One-click setup: [BART recipe](https://poke.com/refer/vFEH7FR-kPn) | [Muni recipe](https://poke.com/r/rqHQjgDqSzT)
+
+Or add manually as a remote MCP server:
 
 - **URL**: `https://bart-mcp.srivastsh.workers.dev/mcp` or `https://muni-mcp.srivastsh.workers.dev/mcp`
 - For Muni, set custom header `x-api-key-511` to your 511 key
