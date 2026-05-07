@@ -3,7 +3,6 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { z } from "zod";
 import viewHtml from "./view.html";
 
-interface Env { API_511_KEY?: string; }
 const API_511_BASE = "https://api.511.org/transit/";
 const MUNI_OPERATOR = "SF";
 
@@ -190,7 +189,7 @@ function addCors(response: Response): Response {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (url.pathname === "/" && request.method === "GET") {
@@ -205,7 +204,7 @@ export default {
     if (url.pathname !== "/mcp") return new Response(JSON.stringify({ error: "Not found. MCP endpoint is at /mcp" }), { status: 404, headers: { "Content-Type": "application/json", ...CORS } });
     if (request.method !== "POST") return new Response(JSON.stringify({ error: "Use POST" }), { status: 405, headers: { "Content-Type": "application/json", ...CORS } });
 
-    const apiKey = request.headers.get("x-api-key-511") || env.API_511_KEY || null;
+    const apiKey = request.headers.get("x-api-key-511") || null;
     if (!apiKey) return new Response(JSON.stringify({ error: "No 511 API key. Set x-api-key-511 header. Free key at https://511.org/open-data/token" }), { status: 401, headers: { "Content-Type": "application/json", ...CORS } });
 
     try {
