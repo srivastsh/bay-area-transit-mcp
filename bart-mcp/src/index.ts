@@ -151,6 +151,10 @@ function addCors(response: Response): Response {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+function wantsEventStream(request: Request): boolean {
+  return request.headers.get("accept")?.includes("text/event-stream") ?? false;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -160,8 +164,11 @@ export default {
       return new Response(null, { status: 204, headers: CORS });
     }
 
-    // Discovery endpoint
-    if (url.pathname === "/" && request.method === "GET") {
+    const isMcpPath = url.pathname === "/" || url.pathname === "/mcp";
+
+    // Discovery endpoint for normal browser visits. MCP clients can use either
+    // the worker root or /mcp; POST and SSE GET requests fall through below.
+    if (isMcpPath && request.method === "GET" && !wantsEventStream(request)) {
       return new Response(JSON.stringify({
         name: "bart-mcp-server", version: "1.0.0",
         description: "BART real-time transit data via MCP",
@@ -170,7 +177,7 @@ export default {
       }, null, 2), { headers: { "Content-Type": "application/json", ...CORS } });
     }
 
-    if (url.pathname !== "/mcp") {
+    if (!isMcpPath) {
       return new Response(JSON.stringify({ error: "Not found. Use /mcp" }), { status: 404, headers: { "Content-Type": "application/json", ...CORS } });
     }
 
