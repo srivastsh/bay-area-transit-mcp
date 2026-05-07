@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
+import viewHtml from "./view.html";
 
 interface Env { API_511_KEY?: string; }
 const API_511_BASE = "https://api.511.org/transit/";
@@ -150,6 +151,35 @@ function createServer(apiKey: string): McpServer {
     } catch (err) { return fail(err); }
   });
 
+  // ── MCP App: Interactive Muni Map ──
+  server.registerTool("muni_map", {
+    title: "Open Muni Interactive Map",
+    description: "Open interactive Muni rail and bus map. Search bus routes, click rail stops, and view real-time departures.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    _meta: { ui: { resourceUri: "ui://muni-mcp/map.html" } },
+  }, async () => {
+    return ok("Interactive Muni map loaded. Search bus routes or click rail stops to see departures.");
+  });
+
+  server.resource(
+    "muni-map-view",
+    "ui://muni-mcp/map.html",
+    {
+      mimeType: "text/html;profile=mcp-app",
+      _meta: {
+        ui: {}
+      }
+    },
+    async () => ({
+      contents: [{
+        uri: "ui://muni-mcp/map.html",
+        mimeType: "text/html;profile=mcp-app",
+        text: viewHtml,
+      }],
+    })
+  );
+
   return server;
 }
 
@@ -169,7 +199,7 @@ export default {
         description: "SF Muni real-time transit data via MCP",
         mcp_endpoint: "/mcp",
         auth: "Pass your 511.org API key via the x-api-key-511 header. Get a free key at https://511.org/open-data/token",
-        tools: ["transit_operators", "muni_routes", "muni_departures", "muni_line", "muni_alerts", "muni_vehicles", "muni_schedule"],
+        tools: ["transit_operators", "muni_routes", "muni_departures", "muni_line", "muni_alerts", "muni_vehicles", "muni_schedule", "muni_map"],
       }, null, 2), { headers: { "Content-Type": "application/json", ...CORS } });
     }
     if (url.pathname !== "/mcp") return new Response(JSON.stringify({ error: "Not found. MCP endpoint is at /mcp" }), { status: 404, headers: { "Content-Type": "application/json", ...CORS } });

@@ -4,3 +4,8 @@ compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 
 # API_511_KEY must be set via: wrangler secret put API_511_KEY
+
+[[rules]]
+type = "Text"
+globs = ["src/**/*.html"]
+fallthrough = true

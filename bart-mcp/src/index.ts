@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
+import viewHtml from "./view.html";
 
 interface Env { BART_API_KEY: string; }
 const BART_BASE = "https://api.bart.gov/api/";
@@ -108,6 +109,39 @@ function createServer(apiKey: string): McpServer {
     } catch (e) { return fail(e); }
   });
 
+  server.registerTool("bart_map", {
+    title: "Open BART Interactive Map",
+    description: "Open interactive BART route map. View departures, plan trips.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    _meta: { ui: { resourceUri: "ui://bart-mcp/map.html" } },
+  }, async () => {
+    return ok("Interactive BART map loaded. Click stations to see departures.");
+  });
+
+  server.resource(
+    "bart-map-view",
+    "ui://bart-mcp/map.html",
+    {
+      mimeType: "text/html;profile=mcp-app",
+      _meta: {
+        ui: {
+          csp: {
+            connectDomains: ["*.basemaps.cartocdn.com", "*.tile.openstreetmap.org"],
+            resourceDomains: ["*.basemaps.cartocdn.com", "*.tile.openstreetmap.org"]
+          }
+        }
+      }
+    },
+    async () => ({
+      contents: [{
+        uri: "ui://bart-mcp/map.html",
+        mimeType: "text/html;profile=mcp-app",
+        text: viewHtml
+      }]
+    })
+  );
+
   return server;
 }
 
@@ -132,7 +166,7 @@ export default {
         name: "bart-mcp-server", version: "1.0.0",
         description: "BART real-time transit data via MCP",
         mcp_endpoint: "/mcp",
-        tools: ["bart_stations", "bart_departures", "bart_trip", "bart_advisories", "bart_fare"],
+        tools: ["bart_stations", "bart_departures", "bart_trip", "bart_advisories", "bart_fare", "bart_map"],
       }, null, 2), { headers: { "Content-Type": "application/json", ...CORS } });
     }
 
