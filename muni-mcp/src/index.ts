@@ -13,7 +13,15 @@ async function fetch511(apiKey: string, endpoint: string, params: Record<string,
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const resp = await fetch(url.toString());
   if (!resp.ok) throw new Error(`511 API ${resp.status}: ${resp.statusText}`);
-  let text = await resp.text();
+
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  let text: string;
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    const decompressed = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    text = await new Response(decompressed).text();
+  } else {
+    text = new TextDecoder().decode(bytes);
+  }
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   return JSON.parse(text);
 }
@@ -49,10 +57,10 @@ function createServer(apiKey: string): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ operator_id }) => {
     try {
-      const data: any = await fetch511(apiKey, "routes", { operator_id });
+      const data: any = await fetch511(apiKey, "lines", { operator_id });
       if (!Array.isArray(data) || !data.length) return ok("No routes found.");
       const lines: string[] = [`# Muni Routes (${data.length})\n`];
-      for (const r of data) lines.push(`- **${r.Id}**: ${r.Name}`);
+      for (const r of data) lines.push(`- **${r.PublicCode || r.Id}**: ${r.Name} (${r.TransportMode || "transit"})`);
       return ok(lines.join("\n"));
     } catch (err) { return fail(err); }
   });
@@ -63,7 +71,7 @@ function createServer(apiKey: string): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ stop_code, operator_id }) => {
     try {
-      const data: any = await fetch511(apiKey, "StopMonitoring", { agency: operator_id, stopCode: stop_code });
+      const data: any = await fetch511(apiKey, "StopMonitoring", { agency: operator_id, stopcode: stop_code });
       const deliveries = data?.ServiceDelivery?.StopMonitoringDelivery?.MonitoredStopVisit || data?.ServiceDelivery?.StopMonitoringDelivery?.[0]?.MonitoredStopVisit;
       if (!deliveries?.length) return ok(`No departures found for stop ${stop_code}.`);
       const lines: string[] = [`# Departures from Stop ${stop_code}\n`];
