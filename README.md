@@ -135,11 +135,7 @@ npm install
 wrangler deploy
 ```
 
-Optionally set a fallback 511 key (used when no header key is provided):
-
-```bash
-wrangler secret put API_511_KEY
-```
+Muni is BYOK-only. Do not set a shared fallback 511 key on the public Worker; each client should pass its own `x-api-key-511` header.
 
 ---
 
@@ -147,7 +143,7 @@ wrangler secret put API_511_KEY
 
 - **Runtime**: Cloudflare Workers (V8 isolates)
 - **Transport**: `WebStandardStreamableHTTPServerTransport` (stateless, one server per request)
-- **Auth**: BYOK via request headers, optional env secret fallback
+- **Auth**: BYOK via request headers for Muni; BART uses the public BART demo key
 - **Validation**: Zod schemas for all tool inputs
 - **CORS**: Enabled for all origins
 - **API Sources**: api.bart.gov (BART), api.511.org (Muni/511)
