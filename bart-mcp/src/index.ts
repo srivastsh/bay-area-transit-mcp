@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
+import viewHtml from "./view.html";
 
 interface Env { BART_API_KEY: string; }
 const BART_BASE = "https://api.bart.gov/api/";
@@ -108,6 +109,39 @@ function createServer(apiKey: string): McpServer {
     } catch (e) { return fail(e); }
   });
 
+  server.registerTool("bart_map", {
+    title: "Open BART Interactive Map",
+    description: "Open interactive BART route map. View departures, plan trips.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    _meta: { ui: { resourceUri: "ui://bart-mcp/map.html" } },
+  }, async () => {
+    return ok("Interactive BART map loaded. Click stations to see departures.");
+  });
+
+  server.resource(
+    "bart-map-view",
+    "ui://bart-mcp/map.html",
+    {
+      mimeType: "text/html;profile=mcp-app",
+      _meta: {
+        ui: {
+          csp: {
+            connectDomains: ["*.basemaps.cartocdn.com", "*.tile.openstreetmap.org"],
+            resourceDomains: ["*.basemaps.cartocdn.com", "*.tile.openstreetmap.org"]
+          }
+        }
+      }
+    },
+    async () => ({
+      contents: [{
+        uri: "ui://bart-mcp/map.html",
+        mimeType: "text/html;profile=mcp-app",
+        text: viewHtml
+      }]
+    })
+  );
+
   return server;
 }
 
@@ -115,6 +149,10 @@ function addCors(response: Response): Response {
   const headers = new Headers(response.headers);
   for (const [k, v] of Object.entries(CORS)) headers.set(k, v);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function wantsEventStream(request: Request): boolean {
+  return request.headers.get("accept")?.includes("text/event-stream") ?? false;
 }
 
 export default {
@@ -126,17 +164,20 @@ export default {
       return new Response(null, { status: 204, headers: CORS });
     }
 
-    // Discovery endpoint
-    if (url.pathname === "/" && request.method === "GET") {
+    const isMcpPath = url.pathname === "/" || url.pathname === "/mcp";
+
+    // Discovery endpoint for normal browser visits. MCP clients can use either
+    // the worker root or /mcp; POST and SSE GET requests fall through below.
+    if (isMcpPath && request.method === "GET" && !wantsEventStream(request)) {
       return new Response(JSON.stringify({
         name: "bart-mcp-server", version: "1.0.0",
         description: "BART real-time transit data via MCP",
         mcp_endpoint: "/mcp",
-        tools: ["bart_stations", "bart_departures", "bart_trip", "bart_advisories", "bart_fare"],
+        tools: ["bart_stations", "bart_departures", "bart_trip", "bart_advisories", "bart_fare", "bart_map"],
       }, null, 2), { headers: { "Content-Type": "application/json", ...CORS } });
     }
 
-    if (url.pathname !== "/mcp") {
+    if (!isMcpPath) {
       return new Response(JSON.stringify({ error: "Not found. Use /mcp" }), { status: 404, headers: { "Content-Type": "application/json", ...CORS } });
     }
 

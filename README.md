@@ -80,7 +80,7 @@ Use `mcp-remote` as a bridge:
 
 ## Available Tools
 
-### BART (5 tools)
+### BART (6 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -89,8 +89,9 @@ Use `mcp-remote` as a bridge:
 | `bart_trip` | Plan a trip between two stations |
 | `bart_advisories` | Current service advisories |
 | `bart_fare` | Fare lookup between two stations |
+| `bart_map` | Interactive schematic BART map |
 
-### Muni (7 tools)
+### Muni (8 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -101,6 +102,7 @@ Use `mcp-remote` as a bridge:
 | `muni_alerts` | Current service alerts |
 | `muni_vehicles` | Real-time vehicle GPS positions |
 | `muni_schedule` | Timetable for a line |
+| `muni_map` | Interactive Muni rail and bus map |
 
 ---
 
@@ -133,11 +135,7 @@ npm install
 wrangler deploy
 ```
 
-Optionally set a fallback 511 key (used when no header key is provided):
-
-```bash
-wrangler secret put API_511_KEY
-```
+Muni is BYOK-only. Do not set a shared fallback 511 key on the public Worker; each client should pass its own `x-api-key-511` header.
 
 ---
 
@@ -145,7 +143,7 @@ wrangler secret put API_511_KEY
 
 - **Runtime**: Cloudflare Workers (V8 isolates)
 - **Transport**: `WebStandardStreamableHTTPServerTransport` (stateless, one server per request)
-- **Auth**: BYOK via request headers, optional env secret fallback
+- **Auth**: BYOK via request headers for Muni; BART uses the public BART demo key
 - **Validation**: Zod schemas for all tool inputs
 - **CORS**: Enabled for all origins
 - **API Sources**: api.bart.gov (BART), api.511.org (Muni/511)

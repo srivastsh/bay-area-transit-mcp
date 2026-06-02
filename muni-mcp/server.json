@@ -55,6 +55,10 @@
     {
       "name": "muni_schedule",
       "description": "Timetable for a Muni line"
+    },
+    {
+      "name": "muni_map",
+      "description": "Interactive Muni rail and bus map"
     }
   ]
 }

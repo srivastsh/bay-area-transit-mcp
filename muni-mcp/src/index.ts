@@ -1,19 +1,36 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
+import viewHtml from "./view.html";
 
-interface Env { API_511_KEY?: string; }
 const API_511_BASE = "https://api.511.org/transit/";
 const MUNI_OPERATOR = "SF";
 
-async function fetch511(apiKey: string, endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
+interface Env {
+  API_511_KEY?: string;
+  MCP_ACCESS_TOKEN?: string;
+}
+
+async function fetch511(apiKey: string | null, endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
+  if (!apiKey) {
+    throw new Error("Muni tools need a personal 511 key. Pass x-api-key-511, or use the private personal URL configured for this Worker.");
+  }
+
   const url = new URL(endpoint, API_511_BASE);
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("format", "json");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const resp = await fetch(url.toString());
   if (!resp.ok) throw new Error(`511 API ${resp.status}: ${resp.statusText}`);
-  let text = await resp.text();
+
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  let text: string;
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    const decompressed = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    text = await new Response(decompressed).text();
+  } else {
+    text = new TextDecoder().decode(bytes);
+  }
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   return JSON.parse(text);
 }
@@ -27,7 +44,7 @@ const CORS: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type,Accept,Authorization,Mcp-Session-Id,x-api-key-511",
 };
 
-function createServer(apiKey: string): McpServer {
+function createServer(apiKey: string | null): McpServer {
   const server = new McpServer({ name: "muni-mcp-server", version: "1.0.0" });
 
   server.registerTool("transit_operators", {
@@ -49,10 +66,10 @@ function createServer(apiKey: string): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ operator_id }) => {
     try {
-      const data: any = await fetch511(apiKey, "routes", { operator_id });
+      const data: any = await fetch511(apiKey, "lines", { operator_id });
       if (!Array.isArray(data) || !data.length) return ok("No routes found.");
       const lines: string[] = [`# Muni Routes (${data.length})\n`];
-      for (const r of data) lines.push(`- **${r.Id}**: ${r.Name}`);
+      for (const r of data) lines.push(`- **${r.PublicCode || r.Id}**: ${r.Name} (${r.TransportMode || "transit"})`);
       return ok(lines.join("\n"));
     } catch (err) { return fail(err); }
   });
@@ -63,7 +80,7 @@ function createServer(apiKey: string): McpServer {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ stop_code, operator_id }) => {
     try {
-      const data: any = await fetch511(apiKey, "StopMonitoring", { agency: operator_id, stopCode: stop_code });
+      const data: any = await fetch511(apiKey, "StopMonitoring", { agency: operator_id, stopcode: stop_code });
       const deliveries = data?.ServiceDelivery?.StopMonitoringDelivery?.MonitoredStopVisit || data?.ServiceDelivery?.StopMonitoringDelivery?.[0]?.MonitoredStopVisit;
       if (!deliveries?.length) return ok(`No departures found for stop ${stop_code}.`);
       const lines: string[] = [`# Departures from Stop ${stop_code}\n`];
@@ -150,6 +167,35 @@ function createServer(apiKey: string): McpServer {
     } catch (err) { return fail(err); }
   });
 
+  // ── MCP App: Interactive Muni Map ──
+  server.registerTool("muni_map", {
+    title: "Open Muni Interactive Map",
+    description: "Open interactive Muni rail and bus map. Search bus routes, click rail stops, and view real-time departures.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    _meta: { ui: { resourceUri: "ui://muni-mcp/map.html" } },
+  }, async () => {
+    return ok("Interactive Muni map loaded. Search bus routes or click rail stops to see departures.");
+  });
+
+  server.resource(
+    "muni-map-view",
+    "ui://muni-mcp/map.html",
+    {
+      mimeType: "text/html;profile=mcp-app",
+      _meta: {
+        ui: {}
+      }
+    },
+    async () => ({
+      contents: [{
+        uri: "ui://muni-mcp/map.html",
+        mimeType: "text/html;profile=mcp-app",
+        text: viewHtml,
+      }],
+    })
+  );
+
   return server;
 }
 
@@ -159,26 +205,48 @@ function addCors(response: Response): Response {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+function wantsEventStream(request: Request): boolean {
+  return request.headers.get("accept")?.includes("text/event-stream") ?? false;
+}
+
+function bearerToken(request: Request): string | null {
+  const auth = request.headers.get("authorization");
+  const match = auth?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] ?? null;
+}
+
+function resolveApiKey(request: Request, env: Env, url: URL): string | null {
+  const headerKey = request.headers.get("x-api-key-511");
+  if (headerKey) return headerKey;
+
+  const token = bearerToken(request) || url.searchParams.get("token");
+  if (env.API_511_KEY && env.MCP_ACCESS_TOKEN && token === env.MCP_ACCESS_TOKEN) {
+    return env.API_511_KEY;
+  }
+
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-    if (url.pathname === "/" && request.method === "GET") {
+
+    const isMcpPath = url.pathname === "/" || url.pathname === "/mcp";
+
+    if (isMcpPath && request.method === "GET" && !wantsEventStream(request)) {
       return new Response(JSON.stringify({
         name: "muni-mcp-server", version: "1.0.0",
         description: "SF Muni real-time transit data via MCP",
         mcp_endpoint: "/mcp",
         auth: "Pass your 511.org API key via the x-api-key-511 header. Get a free key at https://511.org/open-data/token",
-        tools: ["transit_operators", "muni_routes", "muni_departures", "muni_line", "muni_alerts", "muni_vehicles", "muni_schedule"],
+        tools: ["transit_operators", "muni_routes", "muni_departures", "muni_line", "muni_alerts", "muni_vehicles", "muni_schedule", "muni_map"],
       }, null, 2), { headers: { "Content-Type": "application/json", ...CORS } });
     }
-    if (url.pathname !== "/mcp") return new Response(JSON.stringify({ error: "Not found. MCP endpoint is at /mcp" }), { status: 404, headers: { "Content-Type": "application/json", ...CORS } });
-    if (request.method !== "POST") return new Response(JSON.stringify({ error: "Use POST" }), { status: 405, headers: { "Content-Type": "application/json", ...CORS } });
-
-    const apiKey = request.headers.get("x-api-key-511") || env.API_511_KEY || null;
-    if (!apiKey) return new Response(JSON.stringify({ error: "No 511 API key. Set x-api-key-511 header. Free key at https://511.org/open-data/token" }), { status: 401, headers: { "Content-Type": "application/json", ...CORS } });
+    if (!isMcpPath) return new Response(JSON.stringify({ error: "Not found. MCP endpoint is at /mcp" }), { status: 404, headers: { "Content-Type": "application/json", ...CORS } });
 
     try {
+      const apiKey = resolveApiKey(request, env, url);
       const server = createServer(apiKey);
       const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       await server.connect(transport);

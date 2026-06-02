@@ -5,3 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 BART_API_KEY = "MW9S-E7SL-26DU-VV8V"
+
+[[rules]]
+type = "Text"
+globs = ["src/**/*.html"]
+fallthrough = true
