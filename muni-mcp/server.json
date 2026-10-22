@@ -41,6 +41,10 @@
       "description": "Real-time departures from a Muni stop"
     },
     {
+      "name": "muni_stops_nearby",
+      "description": "Find Muni stops near latitude and longitude"
+    },
+    {
       "name": "muni_line",
       "description": "Line details with stops"
     },

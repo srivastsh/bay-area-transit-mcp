@@ -57,6 +57,48 @@ function createServer(apiKey: string): McpServer {
     } catch (err) { return fail(err); }
   });
 
+  server.registerTool("muni_stops_nearby", {
+    title: "Nearby Muni Stops",
+    description: "Find Muni stops near a latitude and longitude. Returns the nearest stop names and IDs with straight-line distances from the requested location in meters.",
+    inputSchema: {
+      latitude: z.number().min(-90).max(90).describe("WGS84 latitude"),
+      longitude: z.number().min(-180).max(180).describe("WGS84 longitude"),
+      radius_meters: z.number().positive().max(10000).default(1000).describe("Search radius in meters (default 1000)"),
+      operator_id: z.string().default(MUNI_OPERATOR).describe("511 operator ID (default SF)"),
+      line_id: z.string().optional().describe("Optional route/line ID to narrow the search"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  }, async ({ latitude, longitude, radius_meters, operator_id, line_id }) => {
+    try {
+      const params: Record<string, string> = { operator_id };
+      if (line_id) params.line_id = line_id;
+      const data: any = await fetch511(apiKey, "stops", params);
+      const stops = data?.Contents?.dataObjects?.ScheduledStopPoint || data?.Stops || data?.stops || (Array.isArray(data) ? data : []);
+      const radians = (value: number) => value * Math.PI / 180;
+      const distance = (lat: number, lon: number) => {
+        const earth = 6371000, dLat = radians(lat - latitude), dLon = radians(lon - longitude);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(latitude)) * Math.cos(radians(lat)) * Math.sin(dLon / 2) ** 2;
+        return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+      const nearby = stops.map((stop: any) => {
+        const location = stop.Location || stop.location || stop.Centroid?.Location || stop.Place?.Centroid?.Location || {};
+        const lat = Number(stop.Latitude ?? stop.latitude ?? location.Latitude ?? location.latitude);
+        const lon = Number(stop.Longitude ?? stop.longitude ?? location.Longitude ?? location.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        return { stop, lat, lon, meters: distance(lat, lon) };
+      }).filter((item: any): item is { stop: any; lat: number; lon: number; meters: number } => item !== null && item.meters <= radius_meters)
+        .sort((a: any, b: any) => a.meters - b.meters).slice(0, 25);
+      if (!nearby.length) return ok(`No Muni stops found within ${radius_meters} meters.`);
+      const lines = [`# Nearby Muni Stops (${nearby.length}, nearest first)\n`, "Distances are straight-line distances from your location.\n"];
+      for (const { stop, meters } of nearby) {
+        const id = stop.id || stop.Id || stop.StopId || stop.stop_id || stop.StopCode || stop.stop_code || "unknown";
+        const name = stop.Name || stop.name || stop.Description || "Unnamed stop";
+        lines.push(`- **${name}** (stop ${id}) — ${Math.round(meters)} meters away`);
+      }
+      return ok(lines.join("\n"));
+    } catch (err) { return fail(err); }
+  });
+
   server.registerTool("muni_departures", {
     title: "Muni Real-Time Departures", description: "Get real-time departure predictions for a Muni stop.\n\nArgs:\n  - stop_code: The 5-digit stop code\n  - operator_id: Optional (default 'SF')",
     inputSchema: { stop_code: z.string().min(1).describe("Muni stop code (e.g. '15731')"), operator_id: z.string().default(MUNI_OPERATOR).describe("Operator ID (default SF)") },
